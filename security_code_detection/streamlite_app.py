@@ -27,7 +27,7 @@ THEME = {
 # ==============================================================================
 # --- SETTINGS & CONSTANTS ---
 # ==============================================================================
-DEFAULT_CAMERA_IP = "http://192.168.1.147:8080/video" 
+DEFAULT_CAMERA_IP = "http://192.168.1.19:8080/video" 
 
 # ==============================================================================
 
@@ -490,6 +490,15 @@ def show_main_menu():
             st.session_state['input_attempt'] = []
             st.session_state['msg_feedback'] = None
             st.rerun()
+            
+        # --- AÑADE ESTO AQUÍ DEBAJO (MANTENIENDO LA TABULACIÓN DENTRO DE COL2) ---
+        if st.button("🔐 RESET PASSWORD", width="stretch"):
+            st.session_state['app_state'] = 'SETUP_PASSWORD'
+            st.session_state['secret_password'] = []
+            st.session_state['input_attempt'] = []
+            st.session_state['msg_feedback'] = None
+            st.rerun()
+
 
 # ==========================================
 # 6. ROUTER
@@ -500,3 +509,8 @@ elif st.session_state['app_state'] == 'MAIN_MENU':
     show_main_menu()
 else:
     show_security_system()
+
+
+
+
+    
