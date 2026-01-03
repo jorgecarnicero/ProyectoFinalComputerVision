@@ -11,7 +11,7 @@ from threading import Thread
 st.set_page_config(page_title="Padel AI Security - Tracking", page_icon="🎾", layout="wide")
 
 # ==============================================================================
-# --- VISUAL THEME CONFIGURATION (PROFESSIONAL LIGHT THEME) ---
+# --- VISUAL THEME CONFIGURATION ---
 # ==============================================================================
 THEME = {
     "background_color": "#FFFFFF",      
@@ -436,7 +436,7 @@ def show_security_system():
 
         st.divider()
         
-        # 2. Flow Buttons (LOGIC HERE)
+        # 2. Flow Buttons 
         if st.session_state['app_state'] == 'SETUP_PASSWORD':
             if st.button("🔐 SAVE PASSWORD", width="stretch"):
                 if len(st.session_state['secret_password']) == 4:
@@ -450,7 +450,6 @@ def show_security_system():
                     st.toast("Password incomplete! Need 4 shapes.", icon="⚠️")
             
             # --- BUTTON DELETE ---
-            # Mostramos este botón SIEMPRE en SETUP si hay algo que borrar
             if len(st.session_state['secret_password']) > 0:
                 if st.button("🔙 DELETE LAST SHAPE", width="stretch"):
                     st.session_state['secret_password'].pop()
@@ -503,7 +502,7 @@ def show_security_system():
                         st.toast(f"Captured: {detected}", icon="📸")
                         st.rerun()
                     else:
-                        st.toast("Maximum 4 shapes reached!", icon="⚠️") # WARNING LOGIC
+                        st.toast("Maximum 4 shapes reached!", icon="⚠️") 
                 
                 # VERIFY
                 elif st.session_state['app_state'] == 'VERIFY_PASSWORD':
@@ -547,8 +546,7 @@ def show_main_menu():
     with col1:
         st.subheader("🎾 Tracker System")
         if st.button("🚀 LAUNCH TRACKER", type="primary", width="stretch"):
-            st.session_state['app_state'] = 'PADEL_TRACKER'
-            st.rerun()
+            st.toast("Tracker feature not available in this version", icon="🚧")
     with col2:
         st.subheader("🔒 Security")
         if st.button("🔒 LOCK SYSTEM", width="stretch"):
@@ -557,7 +555,6 @@ def show_main_menu():
             st.session_state['msg_feedback'] = None
             st.rerun()
             
-        # --- AÑADE ESTO AQUÍ DEBAJO (MANTENIENDO LA TABULACIÓN DENTRO DE COL2) ---
         if st.button("🔐 RESET PASSWORD", width="stretch"):
             st.session_state['app_state'] = 'SETUP_PASSWORD'
             st.session_state['secret_password'] = []
