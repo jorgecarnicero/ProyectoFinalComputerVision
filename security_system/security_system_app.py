@@ -8,7 +8,7 @@ import os
 from threading import Thread
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="Padel AI Security - Tracking", page_icon="🎾", layout="wide")
+st.set_page_config(page_title="Padel AI - Security Version", page_icon="🎾", layout="wide")
 
 # ==============================================================================
 # --- VISUAL THEME CONFIGURATION ---
