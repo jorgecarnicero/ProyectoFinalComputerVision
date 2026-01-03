@@ -127,56 +127,122 @@ st.markdown(f"""
 # 1. SHAPE DETECTION LOGIC
 # ==========================================
 
-def get_shape_name(hull, approx, contour, line_ratio, epsilon_coeff):
+def get_shape_name(hull, approx, contour, line_ratio):
+    num_vertices = len(approx)
     x, y, w, h = cv2.boundingRect(approx)
+    
+    # Aspect Ratio
     aspect_ratio = float(w) / h if w > h else float(h) / w
+    
+    # Solidity
     area_hull = cv2.contourArea(hull)
     area_cnt = cv2.contourArea(contour)
     if area_hull == 0: return "Unidentified"
     solidity = float(area_cnt) / area_hull
+
+    # Circularity (To distinguish Circle vs Pentagon)
     perimeter = cv2.arcLength(contour, True)
     if perimeter == 0: return "Unidentified"
     circularity = 4 * np.pi * area_cnt / (perimeter * perimeter)
 
+    # --- FILTERS ---
     if solidity < 0.8: return "Unidentified"
 
-    if aspect_ratio > line_ratio: return "Line"
-    if len(approx) == 3: return "Triangle"
-    elif len(approx) == 4: return "Square" if 0.85 <= aspect_ratio <= 1.15 else "Rectangle"
-    elif len(approx) == 5: return "Circle" if circularity > 0.82 else "Pentagon"
-    elif len(approx) > 5: return "Circle" if 0.7 <= circularity <= 1.2 else "Unidentified"
+    # --- CLASSIFICATION ---
+
+    # 1. LINE DETECTION
+    if aspect_ratio > line_ratio:
+        return "Line"
+
+    # 2. GEOMETRIC SHAPES
+    if num_vertices == 3:
+        return "Triangle"
+
+    elif num_vertices == 4:
+        if 0.85 <= aspect_ratio <= 1.15:
+            return "Square"
+        else:
+            return "Rectangle"
+
+    elif num_vertices == 5:
+        # If it has 5 vertices but is very round, it's likely a circle approximated poorly
+        if circularity > 0.82: 
+            return "Circle"
+        else:
+            return "Pentagon"
+
+    elif num_vertices > 5:
+        # Standard Circle Check
+        if 0.7 <= circularity <= 1.2: 
+            return "Circle"
+    
     return "Unidentified"
 
 def process_security_frame(frame, min_area, line_ratio, epsilon_coeff, processing_size):
+    # 1. Resize (Optimization)
     small_frame = cv2.resize(frame, processing_size)
+    
+    # 2. Preprocessing (Exact Match to Mini Script)
     gray = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 19, 16)
-    kernel = np.ones((3, 3), np.uint8)
-    dilated = cv2.dilate(thresh, kernel, iterations=1)
+    
+    # Adaptive Threshold (19, 16 params from script)
+    thresh = cv2.adaptiveThreshold(blurred, 255, 
+                                   cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                   cv2.THRESH_BINARY_INV, 
+                                   19, 16)
+    
+    # Kernel Definitions
+    kernel_noise = np.ones((1, 1), np.uint8)
+    kernel_dilate = np.ones((5, 5), np.uint8) # Thicker lines to connect gaps
+    
+    # Morphological Operations
+    # Remove noise
+    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel_noise, iterations=2)
+    # Thicken lines
+    dilated = cv2.dilate(opening, kernel_dilate, iterations=2)
+    
+    # 3. Contour Detection
     contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     best_shape = "Unidentified"
     max_area = 0
     annotated = small_frame.copy() 
     
+    # Scale adjustment for min_area (Streamlit specific helper)
     current_pixels = processing_size[0] * processing_size[1]
     scale_factor = current_pixels / 76800 
     adjusted_min = min_area * scale_factor
 
     for cnt in contours:
         area = cv2.contourArea(cnt)
+        
+        # Filter small noise
         if area > adjusted_min:
+            # Convex Hull (Rubber band wrapper) - Key for hand drawings
             hull = cv2.convexHull(cnt)
+            
+            # Use HULL perimeter for epsilon, not contour perimeter
             peri = cv2.arcLength(hull, True)
             epsilon = epsilon_coeff * peri 
+            
+            # Approximate on HULL
             approx = cv2.approxPolyDP(hull, epsilon, True)
-            name = get_shape_name(hull, approx, cnt, line_ratio, epsilon_coeff)
+            
+            # Identify Shape
+            name = get_shape_name(hull, approx, cnt, line_ratio)
             
             if name != "Unidentified":
+                # Draw Hull in Green
                 cv2.drawContours(annotated, [hull], -1, (0, 255, 0), 2)
+                
+                # Draw Vertices in Red
+                for p in approx:
+                    cv2.circle(annotated, (p[0][0], p[0][1]), 4, (0, 0, 255), -1)
+
                 x, y, w, h = cv2.boundingRect(approx)
-                cv2.putText(annotated, name, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+                cv2.putText(annotated, name, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+                
                 if area > max_area:
                     max_area = area
                     best_shape = name
@@ -513,4 +579,3 @@ else:
 
 
 
-    
