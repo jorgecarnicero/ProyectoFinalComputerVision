@@ -1,11 +1,9 @@
 import cv2
 from typing import List
 import numpy as np
-import imageio
 import cv2
 import copy
 import glob 
-import matplotlib.pyplot as plt
 import os
 import json
 
@@ -27,7 +25,7 @@ imgs_gen_path = 'calibration_images/*.jpeg'
 imgs_path = sorted(glob.glob(imgs_gen_path))
 imgs = load_images(imgs_path) 
 
-print(imgs_path)
+# print(imgs_path)
 
 # Number of rows and cols
 pattern_size = (11,8)
