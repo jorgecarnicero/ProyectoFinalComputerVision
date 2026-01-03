@@ -41,10 +41,9 @@ st.markdown(f"""
     """, unsafe_allow_html=True)
 
 # ==============================================================================
-# --- 2. CLASES CORE (CÁMARA OPTIMIZADA + VISIÓN) ---
+# --- 2. CLASES CORE ---
 # ==============================================================================
 
-# MANTENEMOS LA CÁMARA RÁPIDA QUE ARREGLAMOS ANTES
 class CameraStream:
     def __init__(self, src=0):
         self.src = src
@@ -110,7 +109,7 @@ def load_model():
     return YOLO('yolov8n-pose.pt')
 
 # ==============================================================================
-# --- 3. LÓGICA DE SEGURIDAD (INTACTA) ---
+# --- 3. LÓGICA DE SEGURIDAD ---
 # ==============================================================================
 
 def get_shape_name(hull, approx, contour, line_ratio):
@@ -165,7 +164,7 @@ def process_security_frame(frame, min_area, line_ratio, epsilon_coeff, processin
     return annotated, best_shape
 
 # ==============================================================================
-# --- 4. LÓGICA DE PADEL (AQUÍ ESTÁ TU NUEVA IA) ---
+# --- 4. LÓGICA DE PADEL ---
 # ==============================================================================
 
 def get_player_zone(results, shape_img): 
@@ -201,7 +200,15 @@ def run_padel_analysis(source, placeholders, quality_settings):
     display_w, display_h, jpeg_quality = quality_settings
     DISPLAY_SIZE = (display_w, display_h) 
 
-    # Gestión de cámara global (la rápida)
+    # --- RECUPERAR COLORES DE SESSION STATE ---
+    # Si no existen (no ha entrado a calibrar), usar default
+    if 'padel_colors' not in st.session_state:
+        st.session_state['padel_colors'] = ((37, 61, 100), (54, 138, 226))
+    
+    (h_min, s_min, v_min), (h_max, s_max, v_max) = st.session_state['padel_colors']
+    green_lower = np.array([h_min, s_min, v_min])
+    green_upper = np.array([h_max, s_max, v_max])
+
     if 'global_camera' in st.session_state and st.session_state['global_camera'] is not None:
         if st.session_state['global_camera'].src != source:
             st.session_state['global_camera'].stop()
@@ -214,36 +221,28 @@ def run_padel_analysis(source, placeholders, quality_settings):
     cap_obj = st.session_state['global_camera']
     model = load_model()
     
-    # --- CONFIGURACIÓN ---
+    # === CONFIGURACIÓN ===
     TARGET_WIDTH = 1280 
     SKIP_YOLO_FRAMES = 3   
-    
-    # Color Masks (Ball)
-    green_lower = np.array([37, 61, 100])
-    green_upper = np.array([54, 138, 226])
     
     fgbg = cv2.createBackgroundSubtractorMOG2(history=500, varThreshold=50, detectShadows=False)
     tracker = KalmanTracker()
     visual_trail = deque(maxlen=20)
     history_buffer = deque(maxlen=15) 
     
-    # Optical Flow Params
     lk_params = dict(winSize=(15, 15), maxLevel=2, criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
     p0 = None; old_gray = None 
     
-    # Physics & Hit Logic
     prev_ball_x = None; prev_ball_y = None; prev_velocity = 0; hit_cooldown = 0
     HIT_THRESHOLD = 8; HORIZONTAL_THRESHOLD = 12; FLOW_THRESHOLD = 5 
     
-    # State Vars (AQUÍ FALTABA LA VARIABLE frames_without_detection)
-    frames_without_detection = 0  # <--- CORRECCIÓN IMPORTANTE
+    frames_without_detection = 0 
     bounce_state = 0; min_y_registered = 0; frames_verifying = 0; bounce_text_timer = 0
     frame_count = 0; cached_waist_y = None; cached_ground_y = None; cached_zone_mask = None; player_detected = False
     save_counter = 0
     
     if not os.path.exists('serve_evidence'): os.makedirs('serve_evidence')
 
-    # Wait for cam
     ret = False
     for _ in range(50):
         ret, frame_raw = cap_obj.read()
@@ -254,22 +253,21 @@ def run_padel_analysis(source, placeholders, quality_settings):
         st.error(f"Error iniciando cámara (Fuente: {source}).")
         return
 
-    # Inicializar Optical Flow Gray
     h_raw, w_raw = frame_raw.shape[:2]
     new_h = int(TARGET_WIDTH / (w_raw / h_raw))
     first_frame_resized = cv2.resize(frame_raw, (TARGET_WIDTH, new_h))
     old_gray = cv2.cvtColor(first_frame_resized, cv2.COLOR_BGR2GRAY)
 
+    prev_frame_time = 0
+    
     stop_button = st.sidebar.button("⏹️ DETENER ANÁLISIS")
     
-    # --- BUCLE PRINCIPAL ---
     while not stop_button:
         ret, frame_raw = cap_obj.read()
         if not ret: 
             time.sleep(0.01)
             continue
 
-        # Resize
         h_raw, w_raw = frame_raw.shape[:2]
         new_h = int(TARGET_WIDTH / (w_raw / h_raw))
         frame = cv2.resize(frame_raw, (TARGET_WIDTH, new_h))
@@ -279,7 +277,7 @@ def run_padel_analysis(source, placeholders, quality_settings):
         h_curr, w_curr = frame.shape[:2]
         display_frame = frame.copy()
 
-        # 1. PLAYER DETECTION
+        # 1. PLAYER
         if frame_count % SKIP_YOLO_FRAMES == 0:
             try:
                 results = model(frame, device=0, conf=0.5, max_det=1, verbose=False)
@@ -291,7 +289,7 @@ def run_padel_analysis(source, placeholders, quality_settings):
             cached_zone_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
         waist_y = cached_waist_y; ground_y = cached_ground_y; zone_mask = cached_zone_mask
 
-        # 2. BALL DETECTION
+        # 2. BALL (Con máscara dinámica)
         frame_blur = cv2.GaussianBlur(frame, (5, 5), 0)
         hsv = cv2.cvtColor(frame_blur, cv2.COLOR_BGR2HSV)
         mask_color = cv2.inRange(hsv, green_lower, green_upper)
@@ -307,7 +305,6 @@ def run_padel_analysis(source, placeholders, quality_settings):
         
         curr_ball_y = None; cx_ball = 0; max_area = 0; ball_detected_this_frame = False 
         
-        # Kalman Predict
         raw_pred_x, raw_pred_y = tracker.predict()
         pred_x, pred_y = int(raw_pred_x), int(raw_pred_y)
 
@@ -322,7 +319,7 @@ def run_padel_analysis(source, placeholders, quality_settings):
                         ball_detected_this_frame = True
                         tracker.correct(cx_ball, curr_ball_y)
 
-        # 3. HYBRID TRACKING
+        # 3. TRACKING
         new_flow_point = None; flow_velocity = 0 
         if p0 is not None:
             p1, status, err = cv2.calcOpticalFlowPyrLK(old_gray, frame_gray, p0, None, **lk_params)
@@ -339,7 +336,6 @@ def run_padel_analysis(source, placeholders, quality_settings):
             curr_x, curr_y = cx_ball, curr_ball_y
             p0 = np.array([[[cx_ball, curr_ball_y]]], dtype=np.float32)
             visual_trail.append((cx_ball, curr_ball_y))
-        
         elif new_flow_point is not None and frames_without_detection < 10:
             frames_without_detection += 1
             flow_x, flow_y = new_flow_point[0].ravel()
@@ -353,7 +349,7 @@ def run_padel_analysis(source, placeholders, quality_settings):
         
         history_buffer.append((frame.copy(), curr_x, curr_y, waist_y))
 
-        # --- DRAW VISUALS ---
+        # VISUALS
         for i in range(1, len(visual_trail)):
             if visual_trail[i - 1] and visual_trail[i]:
                 thickness = int(np.sqrt(20 / float(len(visual_trail) - i + 1)) * 2)
@@ -361,9 +357,8 @@ def run_padel_analysis(source, placeholders, quality_settings):
 
         if curr_x is not None and curr_y is not None:
             box_radius = 15
-            top_left = (int(curr_x - box_radius), int(curr_y - box_radius))
-            bottom_right = (int(curr_x + box_radius), int(curr_y + box_radius))
-            cv2.rectangle(display_frame, top_left, bottom_right, (0, 255, 0), 2)
+            cv2.rectangle(display_frame, (int(curr_x - box_radius), int(curr_y - box_radius)), 
+                                         (int(curr_x + box_radius), int(curr_y + box_radius)), (0, 255, 0), 2)
             cv2.putText(display_frame, "BALL", (int(curr_x - 20), int(curr_y - 25)), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
@@ -382,45 +377,27 @@ def run_padel_analysis(source, placeholders, quality_settings):
             if is_hard_hit and is_visual_motion and hit_cooldown == 0:
                 if waist_y and abs(curr_y - waist_y) < 180: 
                     going_down = dy > 2; is_very_vertical = (abs(dx) < HORIZONTAL_THRESHOLD) 
-                    
                     if not (going_down or is_very_vertical):
                         hit_cooldown = 15 
-                        
-                        # --- PHOTO FINISH ---
+                        # PHOTO FINISH
                         retro_idx = -3 
                         if len(history_buffer) >= abs(retro_idx):
                             hist_frame, hist_x, hist_y, hist_waist = history_buffer[retro_idx]
-                            
                             if hist_x and hist_y and hist_waist:
                                 snapshot_frame = hist_frame.copy()
-                                
-                                # Determine Verdict and Color
                                 vertical_dist = hist_y - hist_waist
                                 label = "VALID" if vertical_dist > 0 else "FAULT"
                                 col = (0,255,0) if vertical_dist > 0 else (0,0,255)
-
-                                # 1. Waist Line (Yellow)
                                 cv2.line(snapshot_frame, (0, hist_waist), (w_curr, hist_waist), (0, 255, 255), 2)
-                                
-                                # 2. Ball Circle (Cyan)
                                 cv2.circle(snapshot_frame, (hist_x, hist_y), 25, (255, 255, 0), 3)
-                                
-                                # 3. EVIDENCE LINE
                                 cv2.line(snapshot_frame, (hist_x, hist_y), (hist_x, hist_waist), col, 2)
-                                
                                 cv2.putText(snapshot_frame, f"{label}", (20, 70), cv2.FONT_HERSHEY_SIMPLEX, 1.2, col, 3)
-                                
                                 save_counter += 1
                                 cv2.imwrite(f"serve_evidence/serve_{save_counter}.jpg", snapshot_frame)
-                                
-                                # Update UI
                                 snapshot_rgb = cv2.cvtColor(snapshot_frame, cv2.COLOR_BGR2RGB)
                                 foto_ph.image(snapshot_rgb, caption=f"Impact #{save_counter}", use_container_width=True)
-                                
-                                if label == "VALID": 
-                                    verdict_ph.markdown('<div class="notify-correct"><h1>VALID</h1></div>', unsafe_allow_html=True)
-                                else: 
-                                    verdict_ph.markdown('<div class="notify-wrong"><h1>FAULT</h1></div>', unsafe_allow_html=True)
+                                if label == "VALID": verdict_ph.markdown('<div class="notify-correct"><h1>VALID</h1></div>', unsafe_allow_html=True)
+                                else: verdict_ph.markdown('<div class="notify-wrong"><h1>FAULT</h1></div>', unsafe_allow_html=True)
 
             prev_velocity = curr_velocity; prev_ball_x = curr_x 
         else:
@@ -429,7 +406,7 @@ def run_padel_analysis(source, placeholders, quality_settings):
         if hit_cooldown > 0: hit_cooldown -= 1
         if curr_y: prev_ball_y = curr_y
 
-        # 5. BOUNCE LOGIC
+        # 5. BOUNCE
         if curr_y is not None and ground_y is not None and player_detected:
             if bounce_state == 0:
                 if prev_ball_y and prev_ball_y < ground_y and curr_y >= ground_y:
@@ -441,22 +418,34 @@ def run_padel_analysis(source, placeholders, quality_settings):
                     bounce_text_timer = 30; bounce_state = 0 
                 if frames_verifying > 20: bounce_state = 0
 
-        # FINAL DRAWING
         if player_detected:
             if waist_y: cv2.line(display_frame, (0, waist_y), (w_curr, waist_y), (0, 255, 255), 2)
             if ground_y: cv2.line(display_frame, (0, ground_y), (w_curr, ground_y), (0, 255, 0), 2)
         
         if bounce_text_timer > 0:
-             cv2.putText(display_frame, "BOUNCE", (int(w_curr/2)-100, int(h_curr/2)), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0), 3)
+             cv2.putText(display_frame, "BOUNCE", (int(w_curr/2)-100, int(h_curr/2)), 
+                         cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 4)
              bounce_text_timer -= 1
 
+      
+        if 'prev_frame_time' not in locals(): prev_frame_time = 0
+        new_frame_time = time.time()
+        fps_val = 1 / (new_frame_time - prev_frame_time) if (new_frame_time - prev_frame_time) > 0 else 0
+        prev_frame_time = new_frame_time
+        
+       
+        cv2.rectangle(display_frame, (w_curr - 160, 10), (w_curr - 10, 60), (0, 0, 0), -1)
+        cv2.putText(display_frame, f"FPS: {int(fps_val)}", (w_curr - 150, 45), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        
         old_gray = frame_gray.copy()
+        
+        # --- LIMPIEZA VISUAL: SOLO VIDEO (SIN MÁSCARA) ---
         frame_vis = cv2.resize(display_frame, DISPLAY_SIZE) 
         ret, buffer = cv2.imencode('.jpg', frame_vis, [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality]) 
         video_ph.image(buffer.tobytes(), channels="BGR", width="stretch")
 
         time.sleep(0.01)
-        
+
 # ==============================================================================
 # --- 5. GESTIÓN DE ESTADO Y UI ---
 # ==============================================================================
@@ -467,12 +456,12 @@ if 'input_attempt' not in st.session_state: st.session_state['input_attempt'] = 
 if 'pending_capture' not in st.session_state: st.session_state['pending_capture'] = False
 if 'msg_feedback' not in st.session_state: st.session_state['msg_feedback'] = None
 if 'global_camera' not in st.session_state: st.session_state['global_camera'] = None
+# NUEVO: Estado de colores por defecto
+if 'padel_colors' not in st.session_state: st.session_state['padel_colors'] = ((37, 61, 100), (54, 138, 226))
 
 # --- PANTALLA DE SEGURIDAD ---
 def show_security_system():
-    # CAMBIO: Por defecto sugerimos "2"
     DEFAULT_SOURCE = "2"
-    
     if st.session_state['app_state'] == 'SETUP_PASSWORD':
         st.title("🔒 Security Setup: Create Password")
         current_target = st.session_state['secret_password']
@@ -482,7 +471,7 @@ def show_security_system():
 
     with st.sidebar:
         st.header("⚙️ Configuration")
-        cam_input = st.text_input("Camera Source (ID or URL)", DEFAULT_SOURCE, help="Use '2' or '1' for USB")
+        cam_input = st.text_input("Camera Source", DEFAULT_SOURCE)
         st.divider()
         quality_level = st.slider("Quality Level", 1, 5, 3)
         quality_map = { 1: (240, 180, 30), 2: (320, 240, 50), 3: (400, 300, 70), 4: (480, 360, 80), 5: (640, 480, 90) }
@@ -507,18 +496,15 @@ def show_security_system():
                     if st.session_state['app_state'] == 'VERIFY_PASSWORD' and i < len(st.session_state['secret_password']):
                              if txt != st.session_state['secret_password'][i]: css = "pattern-card pattern-error"
                 st.markdown(f'<div class="{css}">{txt}</div>', unsafe_allow_html=True)
-        
         st.write("") 
         if st.session_state['msg_feedback']:
             msg, mtype = st.session_state['msg_feedback']
             css_class = "notify-correct" if mtype == "SUCCESS" else "notify-wrong"
             st.markdown(f'<div class="{css_class}">{msg}</div>', unsafe_allow_html=True)
             st.session_state['msg_feedback'] = None
-
         st.write("") 
         if st.button("📸 CAPTURE SHAPE", type="primary"):
             st.session_state['pending_capture'] = True
-
         st.divider()
         if st.session_state['app_state'] == 'SETUP_PASSWORD':
             if st.button("🔐 SAVE PASSWORD"):
@@ -531,7 +517,6 @@ def show_security_system():
             if len(st.session_state['secret_password']) > 0:
                 if st.button("🔙 DELETE LAST"):
                     st.session_state['secret_password'].pop(); st.rerun()
-                    
         elif st.session_state['app_state'] == 'VERIFY_PASSWORD':
             if st.button("🔄 RESET"):
                 st.session_state['app_state'] = 'SETUP_PASSWORD'
@@ -541,13 +526,11 @@ def show_security_system():
     with col_vid:
         cam_ph = st.empty()
 
-    # --- LÓGICA DE CÁMARA ---
     final_source = 0
     if cam_input.isdigit(): final_source = int(cam_input)
     elif "http" in cam_input: final_source = cam_input
     else: final_source = 0 
     
-    # Singleton Camera
     if st.session_state['global_camera'] is None:
         st.session_state['global_camera'] = get_shared_camera(final_source)
     elif st.session_state['global_camera'].src != final_source:
@@ -556,16 +539,29 @@ def show_security_system():
     
     cam = st.session_state['global_camera']
 
-    # --- BUCLE PRINCIPAL DE SEGURIDAD ---
-    # Usamos un flag o bucle infinito con sleep para evitar congelamiento
+    prev_frame_time = 0
+    
     while True:
         ret, frame = cam.read()
         if not ret or frame is None:
-            time.sleep(0.01) # Espera breve si no hay frame
+            time.sleep(0.01)
             continue
 
         annotated, shape_name = process_security_frame(frame, min_area, line_ratio, epsilon_coeff, PROCESSING_SIZE)
         
+        # --- BLOQUE FPS (Insertar aquí) ---
+        new_frame_time = time.time()
+        fps_val = 1 / (new_frame_time - prev_frame_time) if (new_frame_time - prev_frame_time) > 0 else 0
+        prev_frame_time = new_frame_time
+        
+        # Si annotated existe, dibujamos sobre él
+        if annotated is not None:
+            h_ann, w_ann = annotated.shape[:2]
+            # Ajustamos tamaño del texto según resolución pequeña de seguridad
+            cv2.rectangle(annotated, (w_ann - 100, 5), (w_ann - 5, 35), (0, 0, 0), -1)
+            cv2.putText(annotated, f"FPS: {int(fps_val)}", (w_ann - 90, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+        # ----------------------------------
+
         if annotated is not None and annotated.size > 0:
             ret_enc, buffer = cv2.imencode('.jpg', annotated, [cv2.IMWRITE_JPEG_QUALITY, JPEG_Q])
             if ret_enc:
@@ -595,9 +591,6 @@ def show_security_system():
                         else:
                             st.session_state['msg_feedback'] = (f"WRONG: {shape_name}", "ERROR")
                             time.sleep(0.5); st.session_state['input_attempt'] = []; st.rerun()
-
-        # [FIX 3] PAUSA CRÍTICA PARA QUE STREAMLIT NO SE CONGELE
-        # Esto permite que los botones funcionen y la UI se refresque
         time.sleep(0.03)
 
 # --- PANTALLA PRINCIPAL ---
@@ -621,17 +614,71 @@ def show_main_menu():
             st.session_state['secret_password'] = []
             st.rerun()
 
-# --- PANTALLA APP PADEL ---
+# --- PANTALLA DE CALIBRACIÓN DE COLOR (CORREGIDA) ---
+def show_calibration_screen():
+    st.title("🎨 Calibración de Color (Pelota)")
+    
+    # Sliders en Sidebar
+    with st.sidebar:
+        st.header("Ajustes HSV")
+        st.info("Mueve los sliders hasta que la pelota se vea BLANCA y el resto NEGRO.")
+        
+        # --- AQUÍ BORRÉ LA LÍNEA QUE DABA ERROR ---
+        
+        # Sliders (Cogen el valor por defecto directamente de la memoria)
+        h_min = st.slider("H Min", 0, 179, st.session_state['padel_colors'][0][0])
+        h_max = st.slider("H Max", 0, 179, st.session_state['padel_colors'][1][0])
+        
+        s_min = st.slider("S Min", 0, 255, st.session_state['padel_colors'][0][1])
+        s_max = st.slider("S Max", 0, 255, st.session_state['padel_colors'][1][1])
+        
+        v_min = st.slider("V Min", 0, 255, st.session_state['padel_colors'][0][2])
+        v_max = st.slider("V Max", 0, 255, st.session_state['padel_colors'][1][2])
+        
+        if st.button("💾 GUARDAR Y VOLVER", type="primary"):
+            # Guardar en memoria
+            st.session_state['padel_colors'] = ((h_min, s_min, v_min), (h_max, s_max, v_max))
+            st.session_state['app_state'] = 'PADEL_APP'
+            st.rerun()
+
+    col_orig, col_mask = st.columns(2)
+    with col_orig: st.markdown("**📷 Cámara Original**"); ph_orig = st.empty()
+    with col_mask: st.markdown("**🎭 Máscara (Lo que ve la IA)**"); ph_mask = st.empty()
+
+    # Usar cámara compartida
+    if st.session_state['global_camera'] is None:
+        st.session_state['global_camera'] = get_shared_camera(2) # Default 2
+    cam = st.session_state['global_camera']
+
+    while True:
+        ret, frame = cam.read()
+        if not ret: time.sleep(0.01); continue
+        
+        # Resize para velocidad
+        frame_small = cv2.resize(frame, (640, 360))
+        
+        # Procesar
+        hsv = cv2.cvtColor(frame_small, cv2.COLOR_BGR2HSV)
+        lower = np.array([h_min, s_min, v_min])
+        upper = np.array([h_max, s_max, v_max])
+        mask = cv2.inRange(hsv, lower, upper)
+        
+        # Mostrar
+        ph_orig.image(cv2.cvtColor(frame_small, cv2.COLOR_BGR2RGB))
+        ph_mask.image(mask)
+        
+        time.sleep(0.03)
+
+# --- PANTALLA APP PADEL (MODIFICADA) ---
 def show_padel_app():
     st.title("🎾 AI Chair Umpire")
     with st.sidebar:
         st.header("Configuration")
         opcion_fuente = st.radio("Video Source", ["USB Camera", "Video File"])
-        
-        source = 2 # Valor por defecto = 2
+        source = 2
         
         if opcion_fuente == "USB Camera":
-            url_input = st.text_input("Camera Index", "2", help="Usually 0, 1, or 2")
+            url_input = st.text_input("Camera Index", "2")
             if url_input.isdigit(): source = int(url_input)
             elif "http" in url_input: source = url_input
             else: source = 0
@@ -639,6 +686,13 @@ def show_padel_app():
             video_path = st.text_input("File Path", "videos/video.mp4")
             source = video_path
             
+        st.divider()
+        
+        # BOTÓN PARA IR A CALIBRAR
+        if st.button("🎨 CALIBRAR COLORES (MÁSCARA)"):
+            st.session_state['app_state'] = 'CALIBRATION'
+            st.rerun()
+
         st.divider()
         quality_level = st.slider("Streaming Quality", 1, 5, 3)
         quality_map = { 1: (320, 180, 40), 2: (480, 270, 60), 3: (640, 360, 70), 4: (854, 480, 80), 5: (1280, 720, 90) }
@@ -661,7 +715,11 @@ def show_padel_app():
 # --- ROUTER ---
 if st.session_state['app_state'] == 'PADEL_APP':
     show_padel_app()
+elif st.session_state['app_state'] == 'CALIBRATION':
+    show_calibration_screen()
 elif st.session_state['app_state'] == 'MAIN_MENU':
     show_main_menu()
 else:
-    show_security_system()
+    show_security_system() 
+
+
