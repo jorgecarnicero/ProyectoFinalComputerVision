@@ -128,8 +128,6 @@ streamlit run security_system/security_system_app.py
 ## 👥 Autores
 
 * **Jorge Carnicero Príncipe**
-<<<<<<< HEAD
 * **Andrés Gil Vicente** 
-=======
-* **Andrés Gil Vicente** 
->>>>>>> 85810d4ad100a3223d08b950cc7c41fb3c3b3beb
+
+
