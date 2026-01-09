@@ -10,7 +10,7 @@ from threading import Thread
 import torch
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="Padel AI - Tracking Version", page_icon="🎾", layout="wide")
+st.set_page_config(page_title="Padel AI System", page_icon="🎾", layout="wide")
 
 # ==============================================================================
 # --- VISUAL THEME CONFIGURATION ---
@@ -462,7 +462,7 @@ def show_app_screen():
         
         source = 0
         if opcion_fuente == "IP Camera (Mobile)":
-            url = st.text_input("IP Webcam URL", "http://192.168.1.XX:8080/video")
+            url = st.text_input("IP Webcam URL", "http://10.27.181.76:8080/video")
             source = url if "http" in url else 0
             if source == 0: st.caption("Using PC Webcam (0)")
         else:

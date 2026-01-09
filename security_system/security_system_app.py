@@ -8,7 +8,7 @@ import os
 from threading import Thread
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="Padel AI - Security Version", page_icon="🎾", layout="wide")
+st.set_page_config(page_title="Padel AI System", page_icon="🎾", layout="wide")
 
 # ==============================================================================
 # --- VISUAL THEME CONFIGURATION ---
@@ -27,7 +27,7 @@ THEME = {
 # ==============================================================================
 # --- SETTINGS & CONSTANTS ---
 # ==============================================================================
-DEFAULT_CAMERA_IP = "http://192.168.1.19:8080/video" 
+DEFAULT_CAMERA_IP = "http://10.27.181.76:8080/video" 
 
 # ==============================================================================
 
