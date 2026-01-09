@@ -32,11 +32,11 @@ El sistema se basa en un enfoque híbrido que combina **Visión por Ordenador Cl
 
 
 * **Técnicas Clásicas:**
-* Segmentación de color HSV y sustracción de fondo MOG2 para detección de la pelota.
-* Flujo Óptico (Lucas-Kanade) para el suavizado de trayectorias.
-* Filtros de Kalman para la predicción de estado y manejo de oclusiones.
-* Aproximación geométrica (Douglas-Peucker) sobre el *Convex Hull* para el módulo de seguridad.
-* Uso de operaciones morfológicos, thresholding 
+    * Segmentación de color HSV y sustracción de fondo MOG2 para detección de la pelota.
+    * Flujo Óptico (Lucas-Kanade) para el suavizado de trayectorias.
+    * Filtros de Kalman para la predicción de estado y manejo de oclusiones.
+    * Aproximación geométrica (Douglas-Peucker) sobre el *Convex Hull* para el módulo de seguridad.
+    * Uso de operaciones morfológicos, thresholding, binarización, etc.
 
 
 * **Interfaz:** Streamlit para el dashboard web y visualización en tiempo real.
