@@ -12,7 +12,7 @@ import torch
 # ==============================================================================
 # --- 1. CONFIGURACIÓN DE PÁGINA Y TEMA VISUAL ---
 # ==============================================================================
-st.set_page_config(page_title="Padel AI System Ultimate", page_icon="🎾", layout="wide")
+st.set_page_config(page_title="Padel AI System", page_icon="🎾", layout="wide")
 
 THEME = {
     "background_color": "#FFFFFF",      
