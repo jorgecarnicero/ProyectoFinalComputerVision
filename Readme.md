@@ -1,4 +1,30 @@
-# Padel AI System: Visión por Ordenador para Seguridad y Análisis Deportivo
+<div align="center">
+  
+  <a href="https://github.com/jorgecarnicero/ProyectoFinalComputerVision">
+    <img src="assets/banner_readme.png" alt="Padel AI System Banner" width="100%">
+  </a>
+
+  <h1>🎾 Padel AI System</h1>
+  <p><strong>Visión por Ordenador aplicada a la Seguridad y el Análisis Deportivo</strong></p>
+
+  <p>
+    <a href="https://www.python.org/">
+      <img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.9+">
+    </a>
+    <a href="https://streamlit.io/">
+      <img src="https://img.shields.io/badge/Streamlit-App-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white" alt="Streamlit App">
+    </a>
+    <a href="https://opencv.org/">
+      <img src="https://img.shields.io/badge/OpenCV-CV2-5C3EE8?style=for-the-badge&logo=opencv&logoColor=white" alt="OpenCV">
+    </a>
+    <a href="https://ultralytics.com/yolov8">
+      <img src="https://img.shields.io/badge/YOLOv8-Pose-00FFFF?style=for-the-badge&logo=yolo&logoColor=black" alt="YOLOv8 Pose">
+    </a>
+  </p>
+</div>
+
+<hr />
+
 
 ## 📖 Introducción
 
