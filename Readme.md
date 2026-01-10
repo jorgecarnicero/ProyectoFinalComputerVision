@@ -18,9 +18,9 @@ El proyecto está organizado en directorios modulares para garantizar la escalab
 ├── 📂 security_system/          # Módulo independiente de reconocimiento de patrones geométricos
 ├── 📂 tracking_system/          # Módulo independiente de seguimiento de bola y lógica de arbitraje
 ├── 📄 .gitignore                # Configuración de Git
-├── 📄 Readme.md                 # Documentación del proyecto
-└── 📄 requirements.txt          # Dependencias y librerías necesarias
 └── 📄 documentation.pdf         # Informe final y documentación del proyecto
+├── 📄 ReadMe.md                 # Documentación del proyecto
+└── 📄 requirements.txt          # Dependencias y librerías necesarias
 ```
 
 ## 🛠️ Tecnologías y Metodología
