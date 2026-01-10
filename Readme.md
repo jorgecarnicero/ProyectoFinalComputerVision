@@ -13,6 +13,7 @@ Este sistema implementa una solución de dos módulo utilizando una única cáma
 El proyecto está organizado en directorios modulares para garantizar la escalabilidad y el orden:
 
 ```text
+├── 📂 assets/                   # Imágenes y contenido visual, por ejemplo para el banner del ReadMe.md
 ├── 📂 calibration_process/      # Scripts e imágenes para la calibración intrínseca de la cámara
 ├── 📂 complete_padel_system/    # Aplicación unificada integrando Seguridad + Tracker
 ├── 📂 security_system/          # Módulo independiente de reconocimiento de patrones geométricos
